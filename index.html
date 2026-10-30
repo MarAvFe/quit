@@ -172,19 +172,30 @@ const exists = (d, name) => d.getFileHandle(name).then(() => true, () => false);
 // Never overwrites: refuses if the name is taken. Returns the handle at the new place.
 async function moveTo(h, from, to) {
   if (await exists(to, h.name)) throw new Error(`"${h.name}" already exists there. Nothing was moved.`);
-  if (h.move) { await h.move(to); return h; }
-  // No move() in this browser: copy, then remove the original only after the copy is written.
+  if (h.move) {
+    try { await h.move(to); return h; }
+    catch (e) {
+      // Chrome on Android does move() as copy + delete and can fail part-way (InvalidStateError).
+      // The destination was free before, so whatever is there now came from this move.
+      if (!await exists(from, h.name)) { if (await exists(to, h.name)) return to.getFileHandle(h.name); throw e; }
+    }
+  }
+  // Copy, then remove the original only once the copy is fully written. Read the bytes up front:
+  // a lazily read File can go stale on Android while the copy is written.
+  const data = await (await (await from.getFileHandle(h.name)).getFile()).arrayBuffer();
   const copy = await to.getFileHandle(h.name, { create: true });
   const w = await copy.createWritable();
-  await w.write(await h.getFile());
+  await w.write(data);
   await w.close();
-  await from.removeEntry(h.name);
+  try { await from.removeEntry(h.name); }
+  catch (e) { await to.removeEntry(h.name).catch(() => {}); throw e; } // original still there: drop the copy, no duplicate
   return copy;
 }
 
 async function swipe(tag, d) {
   const h = files[i];
   if (!h) return;
+  URL.revokeObjectURL(urls.get(h)); urls.delete(h); // release our read of the file before moving it; the card keeps the decoded image
   history.push([tag, await moveTo(h, dir, await dir.getDirectoryHandle(tag, { create: true }))]);
   files.splice(i, 1);
   if (i >= files.length) i = 0;
@@ -242,7 +253,7 @@ async function act(name) {
   if (busy) return;
   busy = true;
   try { await run[name](); }
-  catch (e) { if (e.name !== 'AbortError') alert(e.message); }
+  catch (e) { if (e.name !== 'AbortError') alert(e.name === 'Error' ? e.message : `${e.name}: ${e.message}`); }
   busy = false;
   await render();
   if ((name === 'keep' || name === 'delete') && !files.length && history.length) { await finish(); await render(); }
