@@ -1,7 +1,9 @@
 QUIT
 ====
 
-QUick Image Tagger. Flip through a folder of screenshots/pictures and sort each one into `keep/` or `delete/`. Nothing is ever deleted: files are only moved. Empty `delete/` yourself when you're sure.
+QUick Image Tagger. Flip through a folder of screenshots/pictures and sort each one into `keep/` or `delete/`. Files are only moved while you sort; nothing is deleted until you finish the folder and confirm.
+
+**Use it now: [blog.marcelloavila.com/tools/quit](https://blog.marcelloavila.com/tools/quit/)** (Chrome or Edge, desktop or Android).
 
 <p>
   <img src="docs/screenshot-mobile.jpg" alt="QUIT on a phone, mid-swipe to keep" height="420">
@@ -12,7 +14,7 @@ QUick Image Tagger. Flip through a folder of screenshots/pictures and sort each 
 
 ## Run
 
-Open `index.html` in **Chrome or Edge** (desktop or Android). One file, no install, no server. Firefox and Safari can't write to local folders, so they get a notice instead.
+Use the [hosted version](https://blog.marcelloavila.com/tools/quit/), or open `index.html` in **Chrome or Edge** (desktop or Android). One file, no install, no server. Firefox and Safari can't write to local folders, so they get a notice instead.
 
 Pick a folder (top-left). It shows the folder's `.png`, `.jpg`, `.jpeg` and `.gif` files (not subfolders).
 
@@ -30,9 +32,19 @@ Keys can be remapped in Settings (top-right); they're saved in the browser.
 
 If `keep/` or `delete/` already holds a file with the same name, the move is refused and nothing is overwritten.
 
+### Finishing a folder
+
+After the last picture QUIT asks **All done! Do you want to DELETE?** (Yes / No / I'm not sure). Yes, or DELETE from the "I'm not sure" explanation, asks for one more confirmation with the count, then:
+
+- permanently deletes the pictures you marked delete in this session (other files already in `delete/` are left alone; browsers have no recycle bin),
+- moves the kept pictures back into the original folder,
+- removes `keep/` and `delete/` if they ended up empty.
+
+No / Not now / Esc leaves everything in `keep/` and `delete/`.
+
 ## On a phone
 
-The browser only allows folder access on `https://` or `localhost`, so a plain LAN address (`http://192.168.x.x`) won't work. Host the file somewhere with https (e.g. GitHub Pages) and open it in Chrome for Android.
+The browser only allows folder access on `https://` or `localhost`, so a plain LAN address (`http://192.168.x.x`) won't work. Use the [hosted version](https://blog.marcelloavila.com/tools/quit/) in Chrome for Android.
 
 ## Self-test
 

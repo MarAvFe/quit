@@ -89,7 +89,8 @@
   dialog form { display: flex; gap: var(--gap); justify-content: flex-end; }
   dialog form button { padding: 8px 16px; }
   #reset { background: var(--orange); }
-  dialog form button:last-child { background: var(--cyan); }
+  dialog form button.calm { background: var(--cyan); }
+  dialog form button.danger { background: var(--danger); }
 </style>
 </head>
 <body>
@@ -130,8 +131,10 @@
   <h2>Keys</h2>
   <div id="keymap"></div>
   <p>Click an action, then press its new key (Esc cancels). Swipe right to keep, left to delete. Tap the left/right half of the picture for back/next.</p>
-  <form method="dialog"><button type="button" id="reset">Reset</button><button>Close</button></form>
+  <form method="dialog"><button type="button" id="reset">Reset</button><button class="calm">Close</button></form>
 </dialog>
+
+<dialog id="ask"><h2></h2><p></p><form method="dialog"></form></dialog>
 
 <script>
 const $ = s => document.querySelector(s);
@@ -148,14 +151,14 @@ let keys = { ...DEFAULT_KEYS };
 try { Object.assign(keys, JSON.parse(localStorage.getItem('quit.keys'))); } catch {}
 
 const card = $('#card'), img = $('#card img'), underImg = $('#under img'), msg = $('#msg');
-let dir = null, files = [], i = 0, total = 0, history = [], busy = false, listening = null, drag = null;
+let dir = null, files = [], i = 0, total = 0, history = [], busy = false, listening = null, drag = null, note = '';
 
 // ---- file logic ----
 async function openDir(d) {
   const found = [];
   for await (const h of d.values()) if (h.kind === 'file' && IMG.test(h.name)) found.push(h);
   found.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
-  dir = d; files = found; total = found.length; i = 0; history = [];
+  dir = d; files = found; total = found.length; i = 0; history = []; note = '';
 }
 
 function step(d) { if (files.length) i = (i + d + files.length) % files.length; }
@@ -196,6 +199,22 @@ async function undo() {
   return true;
 }
 
+// End of a folder: permanently delete what was marked delete this session (never other files
+// already in delete/), and move kept pictures back to the folder. Per-file errors don't stop the rest.
+async function cleanup() {
+  const r = { deleted: 0, restored: 0, failed: [] };
+  for (const [tag, h] of history) {
+    try {
+      const sub = await dir.getDirectoryHandle(tag);
+      if (tag === 'delete') { await sub.removeEntry(h.name); r.deleted++; }
+      else { await moveTo(h, sub, dir); r.restored++; }
+    } catch { r.failed.push(h.name); }
+  }
+  for (const tag of ['keep', 'delete']) await dir.removeEntry(tag).catch(() => {}); // non-recursive: only an empty folder goes
+  history = [];
+  return r;
+}
+
 // ---- UI ----
 const urls = new Map(); // handle -> object URL, only for the current and next image
 async function url(h) {
@@ -221,6 +240,34 @@ async function act(name) {
   catch (e) { if (e.name !== 'AbortError') alert(e.message); }
   busy = false;
   await render();
+  if ((name === 'keep' || name === 'delete') && !files.length && history.length) { await finish(); await render(); }
+}
+
+// Resolves with the chosen button's value; Esc or closing gives ''. Focus starts on the safe answer.
+function ask(title, text, choices) {
+  const d = $('#ask');
+  d.querySelector('h2').textContent = title;
+  d.querySelector('p').textContent = text;
+  d.querySelector('form').replaceChildren(...choices.map(([value, label, cls = '']) =>
+    Object.assign(document.createElement('button'), { value, textContent: label, className: cls })));
+  d.returnValue = '';
+  d.showModal();
+  d.querySelector('[value=no]')?.focus();
+  return new Promise(r => d.addEventListener('close', () => r(d.returnValue), { once: true }));
+}
+
+async function finish() {
+  const n = history.filter(([tag]) => tag === 'delete').length, where = `“${dir.name}”`;
+  let a = await ask('All done!', 'Do you want to DELETE?', [['yes', 'Yes', 'danger'], ['no', 'No'], ['unsure', "? I'm not sure", 'calm']]);
+  if (a === 'unsure') a = await ask("I'm not sure",
+    `All pictures were moved into 2 new folders in ${where}: keep and delete. ` +
+    `Press DELETE to actually delete the images in delete and put the kept ones back in ${where}. Or just skip and end here.`,
+    [['yes', 'DELETE', 'danger'], ['no', 'Not now']]);
+  if (a !== 'yes') return;
+  if (await ask('Are you sure?', `${n} ${n === 1 ? 'image' : 'images'} will be permanently deleted. This can't be undone.`,
+    [['yes', `Delete ${n}`, 'danger'], ['no', 'Cancel']]) !== 'yes') return;
+  const r = await cleanup();
+  note = `Deleted ${r.deleted}. ${r.restored} kept back in ${where}.` + (r.failed.length ? ` Couldn't handle: ${r.failed.join(', ')}` : '');
 }
 
 function setStamp(p) {
@@ -248,7 +295,7 @@ async function render() {
     !window.showDirectoryPicker ? "This browser can't move files. Use Chrome or Edge (desktop or Android)." :
     !dir ? 'Pick a folder ↖' :
     !total ? 'No images here' :
-    !h ? 'Done. Check /keep and /delete' :
+    !h ? note || 'Done. Check /keep and /delete' :
     !src ? `Can't read ${h.name}` : '';
   for (const b of document.querySelectorAll('[data-act]')) {
     const a = b.dataset.act;
@@ -299,7 +346,7 @@ addEventListener('keydown', e => {
     listening = null;
     return drawKeys();
   }
-  if ($('#settings').open || e.ctrlKey || e.metaKey || e.altKey || e.repeat) return;
+  if (document.querySelector('dialog[open]') || e.ctrlKey || e.metaKey || e.altKey || e.repeat) return;
   const a = Object.keys(keys).find(a => keys[a] === keyName(e));
   if (a) { e.preventDefault(); act(a); }
 });
@@ -345,6 +392,15 @@ async function selftest() {
     try { await swipe('keep', 1); } catch { refused = true; }
     check(refused && await exists(d, 'a.png') && files.length === 3, 'clash refused');
     check(await undo() && await exists(d, 'c.gif') && !await undo(), 'undo to empty');
+    await keep.removeEntry('a.png');
+    await openDir(d);
+    await put(await d.getDirectoryHandle('delete'), 'old.png'); // not marked this session: must survive
+    for (const tag of ['keep', 'delete', 'delete', 'keep']) await swipe(tag, 1);
+    const r = await cleanup();
+    check(r.deleted === 2 && r.restored === 2 && await exists(d, 'a.png') && await exists(d, 'c.gif') &&
+      !await exists(d, 'b9.jpg') && !await exists(d, 'b10.JPG'), 'cleanup');
+    check(await exists(await d.getDirectoryHandle('delete'), 'old.png') &&
+      !await d.getDirectoryHandle('keep').then(() => true, () => false), 'cleanup spares other files');
     return 'SELFTEST PASS';
   } catch (e) {
     return 'SELFTEST FAIL: ' + e.message;
