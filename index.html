@@ -11,10 +11,10 @@
     --yellow: #ffd23f; --cyan: #70d6ff; --orange: #ffa94d; --pink: #ff8fc7; --keep: #7ae582; --danger: #ff6b6b; --off: #d9d9d9;
     --line: 3px; --radius: 12px; --shadow: 5px 5px 0 var(--ink); --shadow-up: 7px 7px 0 var(--ink); --gap: 14px;
     --font: "Arial Black", "Helvetica Neue", system-ui, sans-serif; --mono: ui-monospace, Consolas, monospace;
-    --fly: 260ms; --snap: 120ms;
+    --fly: 260ms; --snap: 120ms; --spin: 800ms; --spinner-delay: calc(var(--fly) + 200ms); /* only real waiting, not the fly-off */
     --big: 80px; --small: 56px; --bar: 48px;
   }
-  @media (prefers-reduced-motion: reduce) { :root { --fly: 0ms; --snap: 0ms; } }
+  @media (prefers-reduced-motion: reduce) { :root { --fly: 0ms; --snap: 0ms; } #spinner span { animation: none; } }
 
   * { box-sizing: border-box; }
   .sprite { position: absolute; width: 0; height: 0; } /* icon defs only; out of the layout grid */
@@ -68,6 +68,18 @@
   #stamp-keep { left: 24px; background: var(--keep); transform: rotate(-12deg); }
   #stamp-delete { right: 24px; background: var(--danger); transform: rotate(12deg); }
 
+  /* Shown only if work takes longer than a blink, so fast moves don't flicker. */
+  #spinner {
+    position: absolute; z-index: 1; left: 50%; bottom: 24px; translate: -50% 0; display: flex; align-items: center; gap: 10px;
+    padding: 8px 16px; background: var(--yellow); border: var(--line) solid var(--ink); border-radius: var(--radius);
+    box-shadow: var(--shadow); text-transform: uppercase; opacity: 0; visibility: hidden; pointer-events: none;
+  }
+  body.busy #spinner { opacity: 1; visibility: visible; transition: visibility 0s var(--spinner-delay), opacity 0s var(--spinner-delay); }
+  body:has(dialog[open]) #spinner { display: none; }
+  #spinner span { width: 16px; height: 16px; background: var(--ink); animation: spin var(--spin) linear infinite; }
+  @keyframes spin { to { rotate: 360deg; } }
+  body.busy button, body.busy #card { cursor: progress; }
+
   footer { display: flex; justify-content: center; align-items: center; gap: calc(var(--gap) * 2); padding-bottom: 6px; }
   footer button { border-radius: 50%; }
   .big { width: var(--big); height: var(--big); }
@@ -116,6 +128,7 @@
 
 <main>
   <div class="card" id="under"><img alt="" hidden></div>
+  <div id="spinner" role="status"><span></span>Working…</div>
   <div class="card" id="card">
     <img alt="" hidden>
     <p id="msg"></p>
@@ -196,13 +209,15 @@ async function swipe(tag, d) {
   const h = files[i];
   if (!h) return;
   URL.revokeObjectURL(urls.get(h)); urls.delete(h); // release our read of the file before moving it; the card keeps the decoded image
-  history.push([tag, await moveTo(h, dir, await dir.getDirectoryHandle(tag, { create: true }))]);
-  files.splice(i, 1);
-  if (i >= files.length) i = 0;
+  // Fly the card off while the file moves (slow on Android). If the move fails, render() brings the card back.
   setStamp(d);
   card.style.transition = '';
   card.style.transform = `translate(${d * 150}%, 0) rotate(${d * 30}deg)`;
-  await new Promise(r => setTimeout(r, parseFloat(getComputedStyle(document.body).getPropertyValue('--fly'))));
+  const flown = new Promise(r => setTimeout(r, parseFloat(getComputedStyle(document.body).getPropertyValue('--fly'))));
+  history.push([tag, await moveTo(h, dir, await dir.getDirectoryHandle(tag, { create: true }))]);
+  files.splice(i, 1);
+  if (i >= files.length) i = 0;
+  await flown;
 }
 
 async function undo() {
@@ -251,12 +266,13 @@ const run = {
 
 async function act(name) {
   if (busy) return;
-  busy = true;
-  try { await run[name](); }
-  catch (e) { if (e.name !== 'AbortError') alert(e.name === 'Error' ? e.message : `${e.name}: ${e.message}`); }
-  busy = false;
+  document.body.classList.toggle('busy', busy = true);
+  try {
+    await run[name]();
+    if ((name === 'keep' || name === 'delete') && !files.length && history.length) { await render(); await finish(); }
+  } catch (e) { if (e.name !== 'AbortError') alert(e.name === 'Error' ? e.message : `${e.name}: ${e.message}`); }
+  document.body.classList.toggle('busy', busy = false);
   await render();
-  if ((name === 'keep' || name === 'delete') && !files.length && history.length) { await finish(); await render(); }
 }
 
 // Resolves with the chosen button's value; Esc or closing gives ''. Focus starts on the safe answer.
