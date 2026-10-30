@@ -27,6 +27,7 @@ Pick a folder (top-left). It shows the folder's `.png`, `.jpg`, `.jpeg` and `.gi
 | ↶ | `Z` | Undo the last keep/delete (as far back as you like) |
 | ⤢ | `V` | Open full size in a new tab, to zoom |
 | 📁 | `B` | Pick folder |
+| ■ (top) | `S` | Stop: end early (unsorted pictures stay put) and get the same delete question as when done |
 
 Keys can be remapped in Settings (top-right); they're saved in the browser.
 
@@ -34,7 +35,7 @@ If `keep/` or `delete/` already holds a file with the same name, the move is ref
 
 ### Finishing a folder
 
-After the last picture QUIT asks **All done! Do you want to DELETE?** (Yes / No / I'm not sure). Yes, or DELETE from the "I'm not sure" explanation, asks for one more confirmation with the count, then:
+After the last picture, or when you press Stop and confirm, QUIT asks **All done! Do you want to DELETE?** (Yes / No / I'm not sure). Yes, or DELETE from the "I'm not sure" explanation, asks for one more confirmation with the count, then:
 
 - permanently deletes the pictures you marked delete in this session (other files already in `delete/` are left alone; browsers have no recycle bin),
 - moves the kept pictures back into the original folder,

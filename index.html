@@ -36,15 +36,17 @@
   button:disabled { background: var(--off); color: rgb(0 0 0 / .45); box-shadow: none; transform: none; cursor: not-allowed; }
   button svg { width: 55%; height: 55%; }
 
-  header { display: grid; grid-template-columns: var(--bar) 1fr var(--bar); gap: var(--gap); align-items: center; }
+  header { display: grid; grid-template-columns: var(--bar) 1fr var(--bar) var(--bar); gap: var(--gap); align-items: center; }
   header button { width: var(--bar); height: var(--bar); }
   [data-act=folder] { background: var(--yellow); }
   #open-settings { background: var(--cyan); }
+  [data-act=stop] { background: var(--pink); }
   #status {
     justify-self: center; max-width: 100%; min-width: 0; padding: 6px 14px; text-align: center; text-transform: uppercase;
     background: var(--paper); border: var(--line) solid var(--ink); border-radius: var(--radius); box-shadow: var(--shadow);
     transform: rotate(-1.5deg);
   }
+  #count { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   #name { display: block; font: 700 12px var(--mono); text-transform: none; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   #name:empty { display: none; }
 
@@ -101,12 +103,14 @@
   <symbol id="i-heart" viewBox="0 0 24 24" fill="currentColor"><path d="M12 21 3.2 12.2A5.2 5.2 0 0 1 12 5.3a5.2 5.2 0 0 1 8.8 6.9z"/></symbol>
   <symbol id="i-cross" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="square"><path d="M5 5l14 14M19 5 5 19"/></symbol>
   <symbol id="i-undo" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="square"><path d="M9 14 4 9l5-5M4 9h10a6 6 0 0 1 0 12h-3"/></symbol>
+  <symbol id="i-stop" viewBox="0 0 24 24" fill="currentColor"><rect x="5" y="5" width="14" height="14"/></symbol>
   <symbol id="i-expand" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="square"><path d="M14 3h7v7M10 21H3v-7M21 3l-8 8M3 21l8-8"/></symbol>
 </svg>
 
 <header>
   <button data-act="folder"><svg><use href="#i-folder"/></svg></button>
   <div id="status"><span id="count">QUIT // QUICK IMAGE TAGGER</span><span id="name"></span></div>
+  <button data-act="stop"><svg><use href="#i-stop"/></svg></button>
   <button id="open-settings" aria-label="Settings" title="Settings"><svg><use href="#i-settings"/></svg></button>
 </header>
 
@@ -144,7 +148,7 @@ const TAP = 8;      // px of movement still treated as a tap
 // Default keys come from the original QUIT.
 const ACTIONS = {
   folder: ['Pick folder', 'b'], back: ['Back', 'f'], next: ['Next', 'j'], keep: ['Keep', 'k'],
-  delete: ['Delete', 'd'], undo: ['Undo', 'z'], view: ['Open full size', 'v'],
+  delete: ['Delete', 'd'], undo: ['Undo', 'z'], view: ['Open full size', 'v'], stop: ['Stop', 's'],
 };
 const DEFAULT_KEYS = Object.fromEntries(Object.entries(ACTIONS).map(([a, [, k]]) => [a, k]));
 let keys = { ...DEFAULT_KEYS };
@@ -231,6 +235,7 @@ const run = {
   delete: () => swipe('delete', -1),
   undo,
   view: () => { const u = urls.get(files[i]); if (u) window.open(u, '_blank'); }, // must stay sync for popup blockers
+  stop,
 };
 
 async function act(name) {
@@ -256,11 +261,20 @@ function ask(title, text, choices) {
   return new Promise(r => d.addEventListener('close', () => r(d.returnValue), { once: true }));
 }
 
-async function finish() {
+// End early: pictures not sorted yet stay where they are; then the same question as when done.
+async function stop() {
+  if (await ask('Stop here?', `You sorted ${total - files.length} of ${total}. The other ${files.length} stay in “${dir.name}” untouched.`,
+    [['yes', 'Stop'], ['no', 'Keep going', 'calm']]) !== 'yes') return;
+  total -= files.length; files = []; i = 0;
+  note = 'Stopped. Check /keep and /delete';
+  await finish('Stopped!');
+}
+
+async function finish(title = 'All done!') {
   const n = history.filter(([tag]) => tag === 'delete').length, where = `“${dir.name}”`;
-  let a = await ask('All done!', 'Do you want to DELETE?', [['yes', 'Yes', 'danger'], ['no', 'No'], ['unsure', "? I'm not sure", 'calm']]);
+  let a = await ask(title, 'Do you want to DELETE?', [['yes', 'Yes', 'danger'], ['no', 'No'], ['unsure', "? I'm not sure", 'calm']]);
   if (a === 'unsure') a = await ask("I'm not sure",
-    `All pictures were moved into 2 new folders in ${where}: keep and delete. ` +
+    `The pictures you sorted were moved into 2 new folders in ${where}: keep and delete. ` +
     `Press DELETE to actually delete the images in delete and put the kept ones back in ${where}. Or just skip and end here.`,
     [['yes', 'DELETE', 'danger'], ['no', 'Not now']]);
   if (a !== 'yes') return;
@@ -289,7 +303,7 @@ async function render() {
   card.style.transition = '';
 
   const done = total - files.length;
-  $('#count').textContent = dir ? `${done}/${total} tagged · ${total ? Math.floor(done * 100 / total) : 0}%` : 'QUIT // QUICK IMAGE TAGGER';
+  $('#count').textContent = dir ? `${done}/${total} · ${total ? Math.floor(done * 100 / total) : 0}%` : 'QUIT // QUICK IMAGE TAGGER';
   $('#name').textContent = h ? `${dir.name}/${h.name}` : dir ? dir.name : '';
   msg.textContent =
     !window.showDirectoryPicker ? "This browser can't move files. Use Chrome or Edge (desktop or Android)." :
@@ -299,7 +313,7 @@ async function render() {
     !src ? `Can't read ${h.name}` : '';
   for (const b of document.querySelectorAll('[data-act]')) {
     const a = b.dataset.act;
-    b.disabled = a === 'folder' ? !window.showDirectoryPicker : a === 'undo' ? !history.length : !h;
+    b.disabled = a === 'folder' ? !window.showDirectoryPicker : a === 'undo' ? !history.length : a === 'stop' ? !history.length || !h : !h;
   }
 }
 img.onerror = () => { img.hidden = true; msg.textContent = `Can't read ${files[i]?.name}`; };
@@ -410,6 +424,7 @@ async function selftest() {
   }
 }
 
+drawKeys(); // also gives the icon buttons their labels and tooltips
 if (location.hash === '#selftest') selftest().catch(e => 'SELFTEST FAIL: ' + e.message).then(async r => { await render(); msg.textContent = r; });
 else render();
 </script>
