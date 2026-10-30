@@ -1,0 +1,361 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>QUIT</title>
+<style>
+  /* Neo-brutalism: flat loud colors, thick black outlines, hard offset shadows, little motion. */
+  :root {
+    --ink: #000; --paper: #fff; --bg: #a78bfa; --grid: rgb(0 0 0 / .07);
+    --yellow: #ffd23f; --cyan: #70d6ff; --orange: #ffa94d; --pink: #ff8fc7; --keep: #7ae582; --danger: #ff6b6b; --off: #d9d9d9;
+    --line: 3px; --radius: 12px; --shadow: 5px 5px 0 var(--ink); --shadow-up: 7px 7px 0 var(--ink); --gap: 14px;
+    --font: "Arial Black", "Helvetica Neue", system-ui, sans-serif; --mono: ui-monospace, Consolas, monospace;
+    --fly: 260ms; --snap: 120ms;
+    --big: 80px; --small: 56px; --bar: 48px;
+  }
+  @media (prefers-reduced-motion: reduce) { :root { --fly: 0ms; --snap: 0ms; } }
+
+  * { box-sizing: border-box; }
+  .sprite { position: absolute; width: 0; height: 0; } /* icon defs only; out of the layout grid */
+  body {
+    margin: 0; height: 100dvh; overflow: hidden; display: grid; grid-template-rows: auto 1fr auto;
+    gap: calc(var(--gap) * 1.5); padding: var(--gap); color: var(--ink); font: 900 15px/1.3 var(--font);
+    background: linear-gradient(var(--grid) 1px, transparent 1px), linear-gradient(90deg, var(--grid) 1px, transparent 1px), var(--bg);
+    background-size: 32px 32px;
+  }
+
+  button {
+    font: inherit; color: var(--ink); background: var(--paper); border: var(--line) solid var(--ink);
+    border-radius: var(--radius); box-shadow: var(--shadow); cursor: pointer; display: grid; place-items: center; padding: 0;
+    transition: transform var(--snap), box-shadow var(--snap);
+  }
+  button:hover { transform: translate(-2px, -2px); box-shadow: var(--shadow-up); }
+  button:active { transform: translate(5px, 5px); box-shadow: none; }
+  button:focus-visible { outline: var(--line) dashed var(--ink); outline-offset: 4px; }
+  button:disabled { background: var(--off); color: rgb(0 0 0 / .45); box-shadow: none; transform: none; cursor: not-allowed; }
+  button svg { width: 55%; height: 55%; }
+
+  header { display: grid; grid-template-columns: var(--bar) 1fr var(--bar); gap: var(--gap); align-items: center; }
+  header button { width: var(--bar); height: var(--bar); }
+  [data-act=folder] { background: var(--yellow); }
+  #open-settings { background: var(--cyan); }
+  #status {
+    justify-self: center; max-width: 100%; min-width: 0; padding: 6px 14px; text-align: center; text-transform: uppercase;
+    background: var(--paper); border: var(--line) solid var(--ink); border-radius: var(--radius); box-shadow: var(--shadow);
+    transform: rotate(-1.5deg);
+  }
+  #name { display: block; font: 700 12px var(--mono); text-transform: none; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #name:empty { display: none; }
+
+  main { position: relative; width: min(100%, 900px); margin: 0 auto; }
+  .card {
+    position: absolute; inset: 0 8px 8px 0; background: var(--paper); border: var(--line) solid var(--ink);
+    border-radius: var(--radius); box-shadow: 8px 8px 0 var(--ink); display: grid; place-items: center; overflow: hidden;
+    touch-action: none; user-select: none; transition: transform var(--fly) ease-out;
+  }
+  #under { background: var(--pink); transform: rotate(-3deg) scale(.95); }
+  .card img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: scale-down; pointer-events: none; }
+  #card { cursor: grab; }
+  #card:active { cursor: grabbing; }
+  #msg { position: absolute; margin: var(--gap); font-size: clamp(20px, 5vw, 34px); text-align: center; text-transform: uppercase; }
+  .stamp {
+    position: absolute; top: 24px; padding: 4px 14px; font-size: 36px; opacity: 0; pointer-events: none;
+    border: var(--line) solid var(--ink); border-radius: var(--radius); box-shadow: var(--shadow);
+  }
+  #stamp-keep { left: 24px; background: var(--keep); transform: rotate(-12deg); }
+  #stamp-delete { right: 24px; background: var(--danger); transform: rotate(12deg); }
+
+  footer { display: flex; justify-content: center; align-items: center; gap: calc(var(--gap) * 2); padding-bottom: 6px; }
+  footer button { border-radius: 50%; }
+  .big { width: var(--big); height: var(--big); }
+  .small { width: var(--small); height: var(--small); }
+  [data-act=keep] { background: var(--keep); }
+  [data-act=delete] { background: var(--danger); }
+  [data-act=undo] { background: var(--orange); }
+  [data-act=view] { background: var(--cyan); }
+
+  dialog {
+    border: var(--line) solid var(--ink); border-radius: var(--radius); box-shadow: 8px 8px 0 var(--ink);
+    background: var(--paper); color: var(--ink); font: inherit; padding: calc(var(--gap) * 1.5); width: min(92vw, 420px);
+  }
+  dialog::backdrop { background: rgb(0 0 0 / .5); }
+  dialog h2 { margin: 0 0 var(--gap); text-transform: uppercase; }
+  #keymap { display: grid; gap: 10px; }
+  #keymap button { display: flex; justify-content: space-between; align-items: center; padding: 8px 12px; width: 100%; box-shadow: 3px 3px 0 var(--ink); }
+  #keymap button[aria-pressed=true] { background: var(--yellow); }
+  kbd { font: 700 14px var(--mono); background: var(--yellow); border: 2px solid var(--ink); border-radius: 6px; padding: 1px 8px; }
+  dialog p { font: 600 13px/1.4 system-ui, sans-serif; }
+  dialog form { display: flex; gap: var(--gap); justify-content: flex-end; }
+  dialog form button { padding: 8px 16px; }
+  #reset { background: var(--orange); }
+  dialog form button:last-child { background: var(--cyan); }
+</style>
+</head>
+<body>
+<!-- Placeholder icons. To swap in Noun Project icons, replace each <symbol>'s contents (keep the id). -->
+<svg class="sprite" aria-hidden="true">
+  <symbol id="i-folder" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linejoin="miter"><path d="M2 5h7l2 3h11v12H2z"/></symbol>
+  <symbol id="i-settings" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M2 6h20M2 12h20M2 18h20"/><rect x="5" y="3.5" width="4" height="5" fill="currentColor"/><rect x="14" y="9.5" width="4" height="5" fill="currentColor"/><rect x="8" y="15.5" width="4" height="5" fill="currentColor"/></symbol>
+  <symbol id="i-heart" viewBox="0 0 24 24" fill="currentColor"><path d="M12 21 3.2 12.2A5.2 5.2 0 0 1 12 5.3a5.2 5.2 0 0 1 8.8 6.9z"/></symbol>
+  <symbol id="i-cross" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="square"><path d="M5 5l14 14M19 5 5 19"/></symbol>
+  <symbol id="i-undo" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="square"><path d="M9 14 4 9l5-5M4 9h10a6 6 0 0 1 0 12h-3"/></symbol>
+  <symbol id="i-expand" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="square"><path d="M14 3h7v7M10 21H3v-7M21 3l-8 8M3 21l8-8"/></symbol>
+</svg>
+
+<header>
+  <button data-act="folder"><svg><use href="#i-folder"/></svg></button>
+  <div id="status"><span id="count">QUIT // QUICK IMAGE TAGGER</span><span id="name"></span></div>
+  <button id="open-settings" aria-label="Settings" title="Settings"><svg><use href="#i-settings"/></svg></button>
+</header>
+
+<main>
+  <div class="card" id="under"><img alt="" hidden></div>
+  <div class="card" id="card">
+    <img alt="" hidden>
+    <p id="msg"></p>
+    <span class="stamp" id="stamp-keep">KEEP</span>
+    <span class="stamp" id="stamp-delete">DELETE</span>
+  </div>
+</main>
+
+<footer>
+  <button class="small" data-act="undo"><svg><use href="#i-undo"/></svg></button>
+  <button class="big" data-act="delete"><svg><use href="#i-cross"/></svg></button>
+  <button class="big" data-act="keep"><svg><use href="#i-heart"/></svg></button>
+  <button class="small" data-act="view"><svg><use href="#i-expand"/></svg></button>
+</footer>
+
+<dialog id="settings">
+  <h2>Keys</h2>
+  <div id="keymap"></div>
+  <p>Click an action, then press its new key (Esc cancels). Swipe right to keep, left to delete. Tap the left/right half of the picture for back/next.</p>
+  <form method="dialog"><button type="button" id="reset">Reset</button><button>Close</button></form>
+</dialog>
+
+<script>
+const $ = s => document.querySelector(s);
+const IMG = /\.(png|jpe?g|gif)$/i;
+const SWIPE = 0.25; // fraction of card width a drag must travel to count as keep/delete
+const TAP = 8;      // px of movement still treated as a tap
+// Default keys come from the original QUIT.
+const ACTIONS = {
+  folder: ['Pick folder', 'b'], back: ['Back', 'f'], next: ['Next', 'j'], keep: ['Keep', 'k'],
+  delete: ['Delete', 'd'], undo: ['Undo', 'z'], view: ['Open full size', 'v'],
+};
+const DEFAULT_KEYS = Object.fromEntries(Object.entries(ACTIONS).map(([a, [, k]]) => [a, k]));
+let keys = { ...DEFAULT_KEYS };
+try { Object.assign(keys, JSON.parse(localStorage.getItem('quit.keys'))); } catch {}
+
+const card = $('#card'), img = $('#card img'), underImg = $('#under img'), msg = $('#msg');
+let dir = null, files = [], i = 0, total = 0, history = [], busy = false, listening = null, drag = null;
+
+// ---- file logic ----
+async function openDir(d) {
+  const found = [];
+  for await (const h of d.values()) if (h.kind === 'file' && IMG.test(h.name)) found.push(h);
+  found.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
+  dir = d; files = found; total = found.length; i = 0; history = [];
+}
+
+function step(d) { if (files.length) i = (i + d + files.length) % files.length; }
+
+const exists = (d, name) => d.getFileHandle(name).then(() => true, () => false);
+
+// Never overwrites: refuses if the name is taken. Returns the handle at the new place.
+async function moveTo(h, from, to) {
+  if (await exists(to, h.name)) throw new Error(`"${h.name}" already exists there. Nothing was moved.`);
+  if (h.move) { await h.move(to); return h; }
+  // No move() in this browser: copy, then remove the original only after the copy is written.
+  const copy = await to.getFileHandle(h.name, { create: true });
+  const w = await copy.createWritable();
+  await w.write(await h.getFile());
+  await w.close();
+  await from.removeEntry(h.name);
+  return copy;
+}
+
+async function swipe(tag, d) {
+  const h = files[i];
+  if (!h) return;
+  history.push([tag, await moveTo(h, dir, await dir.getDirectoryHandle(tag, { create: true }))]);
+  files.splice(i, 1);
+  if (i >= files.length) i = 0;
+  setStamp(d);
+  card.style.transition = '';
+  card.style.transform = `translate(${d * 150}%, 0) rotate(${d * 30}deg)`;
+  await new Promise(r => setTimeout(r, parseFloat(getComputedStyle(document.body).getPropertyValue('--fly'))));
+}
+
+async function undo() {
+  const last = history.at(-1);
+  if (!last) return false;
+  const back = await moveTo(last[1], await dir.getDirectoryHandle(last[0]), dir);
+  history.pop();
+  files.splice(i, 0, back);
+  return true;
+}
+
+// ---- UI ----
+const urls = new Map(); // handle -> object URL, only for the current and next image
+async function url(h) {
+  if (!h) return null;
+  if (!urls.has(h)) urls.set(h, await h.getFile().then(URL.createObjectURL, () => null));
+  return urls.get(h);
+}
+
+const run = {
+  folder: async () => openDir(await showDirectoryPicker({ mode: 'readwrite' })),
+  back: () => step(-1),
+  next: () => step(1),
+  keep: () => swipe('keep', 1),
+  delete: () => swipe('delete', -1),
+  undo,
+  view: () => { const u = urls.get(files[i]); if (u) window.open(u, '_blank'); }, // must stay sync for popup blockers
+};
+
+async function act(name) {
+  if (busy) return;
+  busy = true;
+  try { await run[name](); }
+  catch (e) { if (e.name !== 'AbortError') alert(e.message); }
+  busy = false;
+  await render();
+}
+
+function setStamp(p) {
+  $('#stamp-keep').style.opacity = Math.max(0, Math.min(1, p));
+  $('#stamp-delete').style.opacity = Math.max(0, Math.min(1, -p));
+}
+
+async function render() {
+  const h = files[i], n = files.length > 1 ? files[(i + 1) % files.length] : null;
+  const [src, nextSrc] = await Promise.all([url(h), url(n)]);
+  for (const [k, u] of urls) if (k !== h && k !== n) { URL.revokeObjectURL(u); urls.delete(k); }
+
+  card.style.transition = 'none';
+  card.style.transform = '';
+  setStamp(0);
+  img.hidden = !src; if (src) img.src = src;
+  underImg.hidden = !nextSrc; if (nextSrc) underImg.src = nextSrc;
+  void card.offsetWidth; // apply the reset before re-enabling the transition
+  card.style.transition = '';
+
+  const done = total - files.length;
+  $('#count').textContent = dir ? `${done}/${total} tagged · ${total ? Math.floor(done * 100 / total) : 0}%` : 'QUIT // QUICK IMAGE TAGGER';
+  $('#name').textContent = h ? `${dir.name}/${h.name}` : dir ? dir.name : '';
+  msg.textContent =
+    !window.showDirectoryPicker ? "This browser can't move files. Use Chrome or Edge (desktop or Android)." :
+    !dir ? 'Pick a folder ↖' :
+    !total ? 'No images here' :
+    !h ? 'Done. Check /keep and /delete' :
+    !src ? `Can't read ${h.name}` : '';
+  for (const b of document.querySelectorAll('[data-act]')) {
+    const a = b.dataset.act;
+    b.disabled = a === 'folder' ? !window.showDirectoryPicker : a === 'undo' ? !history.length : !h;
+  }
+}
+img.onerror = () => { img.hidden = true; msg.textContent = `Can't read ${files[i]?.name}`; };
+
+// ---- input ----
+for (const b of document.querySelectorAll('[data-act]')) b.onclick = () => act(b.dataset.act);
+
+card.addEventListener('pointerdown', e => {
+  if (busy || !files[i]) return;
+  drag = { x: e.clientX, y: e.clientY, dx: 0, dy: 0 };
+  card.setPointerCapture(e.pointerId);
+  card.style.transition = 'none';
+});
+card.addEventListener('pointermove', e => {
+  if (!drag) return;
+  drag.dx = e.clientX - drag.x; drag.dy = e.clientY - drag.y;
+  card.style.transform = `translate(${drag.dx}px, ${drag.dy}px) rotate(${drag.dx / 15}deg)`;
+  setStamp(drag.dx / (card.offsetWidth * SWIPE));
+});
+card.addEventListener('pointerup', e => {
+  if (!drag) return;
+  const { dx, dy } = drag, r = card.getBoundingClientRect();
+  drag = null;
+  card.style.transition = '';
+  if (Math.abs(dx) > r.width * SWIPE) return act(dx > 0 ? 'keep' : 'delete');
+  card.style.transform = '';
+  setStamp(0);
+  if (Math.hypot(dx, dy) < TAP) act(e.clientX - r.left < r.width / 2 ? 'back' : 'next');
+});
+card.addEventListener('pointercancel', () => { drag = null; card.style.transition = ''; card.style.transform = ''; setStamp(0); });
+
+const keyName = e => e.key.length === 1 ? e.key.toLowerCase() : e.key;
+const keyLabel = k => !k ? '—' : k === ' ' ? 'SPACE' : k.replace('Arrow', '').toUpperCase();
+
+addEventListener('keydown', e => {
+  if (listening) {
+    e.preventDefault();
+    if (e.key !== 'Escape') {
+      const k = keyName(e), other = Object.keys(keys).find(a => keys[a] === k);
+      if (other) keys[other] = keys[listening]; // swap so no key is bound twice
+      keys[listening] = k;
+      localStorage.setItem('quit.keys', JSON.stringify(keys));
+    }
+    listening = null;
+    return drawKeys();
+  }
+  if ($('#settings').open || e.ctrlKey || e.metaKey || e.altKey || e.repeat) return;
+  const a = Object.keys(keys).find(a => keys[a] === keyName(e));
+  if (a) { e.preventDefault(); act(a); }
+});
+
+function drawKeys() {
+  $('#keymap').replaceChildren(...Object.entries(ACTIONS).map(([a, [label]]) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.setAttribute('aria-pressed', listening === a);
+    b.append(label, Object.assign(document.createElement('kbd'), { textContent: listening === a ? 'press a key…' : keyLabel(keys[a]) }));
+    b.onclick = () => { listening = a; drawKeys(); };
+    return b;
+  }));
+  for (const b of document.querySelectorAll('[data-act]')) {
+    const label = `${ACTIONS[b.dataset.act][0]} [${keyLabel(keys[b.dataset.act])}]`;
+    b.title = label; b.setAttribute('aria-label', label);
+  }
+}
+$('#open-settings').onclick = () => { drawKeys(); $('#settings').showModal(); };
+$('#reset').onclick = () => { keys = { ...DEFAULT_KEYS }; localStorage.removeItem('quit.keys'); drawKeys(); };
+$('#settings').onclose = () => { listening = null; };
+
+// ---- self-test: serve over http (private storage is blocked on file://) and open /#selftest.
+// Runs in the browser's private storage, never on your files.
+async function selftest() {
+  const root = await navigator.storage.getDirectory();
+  const d = await root.getDirectoryHandle('quit-selftest-' + Date.now(), { create: true });
+  const put = async (dd, name) => { const w = await (await dd.getFileHandle(name, { create: true })).createWritable(); await w.write(name); await w.close(); };
+  const check = (ok, what) => { if (!ok) throw new Error(what); };
+  try {
+    for (const name of ['b10.JPG', 'b9.jpg', 'a.png', 'c.gif', 'notes.txt']) await put(d, name);
+    await openDir(d);
+    check(files.map(h => h.name).join() === 'a.png,b9.jpg,b10.JPG,c.gif', 'scan+sort');
+    step(-1); check(files[i].name === 'c.gif', 'back wraps');
+    await swipe('keep', 1);
+    const keep = await d.getDirectoryHandle('keep');
+    check(await exists(keep, 'c.gif') && !await exists(d, 'c.gif') && files[i].name === 'a.png', 'keep last wraps');
+    await swipe('delete', -1);
+    check(await exists(await d.getDirectoryHandle('delete'), 'a.png') && files[i].name === 'b9.jpg', 'delete');
+    check(await undo() && await exists(d, 'a.png') && files[i].name === 'a.png' && files.length === 3, 'undo');
+    await put(keep, 'a.png');
+    let refused = false;
+    try { await swipe('keep', 1); } catch { refused = true; }
+    check(refused && await exists(d, 'a.png') && files.length === 3, 'clash refused');
+    check(await undo() && await exists(d, 'c.gif') && !await undo(), 'undo to empty');
+    return 'SELFTEST PASS';
+  } catch (e) {
+    return 'SELFTEST FAIL: ' + e.message;
+  } finally {
+    await root.removeEntry(d.name, { recursive: true });
+    dir = null; files = []; total = 0; history = [];
+  }
+}
+
+if (location.hash === '#selftest') selftest().catch(e => 'SELFTEST FAIL: ' + e.message).then(async r => { await render(); msg.textContent = r; });
+else render();
+</script>
+</body>
+</html>
